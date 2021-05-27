@@ -1,14 +1,18 @@
 import numpy as np
 from datetime import datetime
 import keras
+from keras.applications import VGG16, ResNet152
+from keras import layers, models
 import tensorflow as tf
 import matplotlib.cm as cm
 import os
+from pickle import dump
 
 
 def _load_image_(named: str = '') -> np.array:
     filepath = '../data/' + named
-    photo = keras.preprocessing.image.load_img(filepath, target_size=(224, 224))
+    photo = keras.preprocessing.image.load_img(
+        filepath, target_size=(224, 224))
     photo_as_array = keras.preprocessing.image.img_to_array(photo)
     return photo_as_array
 
@@ -39,7 +43,8 @@ def preprocess_data():
         for file in files:
             filepath = os.path.join(subdir, file)
             preprocessed_image_array = _load_and_preprocess_image_(file)
-            _save_(preprocessed_image_array, '../preprocessed_data/' + filepath)
+            _save_(preprocessed_image_array,
+                   '../preprocessed_data/' + filepath)
 
 
 def save_gradcam_for_image_(named: str = '', saliency_maps: list = [], alpha: float = 0.4):
@@ -77,7 +82,8 @@ def save_gradcam_for_image_(named: str = '', saliency_maps: list = [], alpha: fl
 
 def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: str, place: int) -> np.array:
     gradient_model = tf.keras.models.Model(
-        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+        [model.inputs], [model.get_layer(
+            last_conv_layer_name).output, model.output]
     )
 
     with tf.GradientTape() as tape:
@@ -87,7 +93,8 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
         sorted_preds = np.argsort(preds[0])
         # print(sorted_preds)
         index = sorted_preds[-1 * place]
-        print('Classification rank:', place, 'Index:', index, 'Value:', preds[0][index])
+        print('Classification rank:', place, 'Index:',
+              index, 'Value:', preds[0][index])
         class_channel = preds[:, index]
 
     gradients = tape.gradient(class_channel, last_conv_layer_output)
@@ -97,7 +104,8 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
     saliency_map = last_conv_layer_output @ pooled_gradients[..., tf.newaxis]
     saliency_map = tf.squeeze(saliency_map)
     # For visualization normalize the between 0 & 1
-    saliency_map = tf.maximum(saliency_map, 0) / tf.math.reduce_max(saliency_map)
+    saliency_map = tf.maximum(saliency_map, 0) / \
+        tf.math.reduce_max(saliency_map)
 
     return saliency_map.numpy()
 
@@ -124,13 +132,33 @@ def grad_cam_saliency(disagreements, models):
     saliency_maps = []
     for filename, model in disagreements.items():
         image = _load_image_(filename)
-        saliency_maps.append(make_saliency_map_for_gradcam(image, models[model], 'block5_conv3'))
+        saliency_maps.append(make_saliency_map_for_gradcam(
+            image, models[model], 'block5_conv3'))
         save_gradcam_for_image_(filename, saliency_maps)
 
 
-def down_load_and_modify_models() -> tuple:
-    # TODO: implement to return tuple of two models
-    pass
+def down_load_and_modify_models() -> list:
+    # Adjustable based on our preprocessing
+    image_shape = (150, 150, 3)
+    models_to_train = []
+
+    pre_model_one = VGG16(
+        weights='imagenet', include_top=False, input_shape=image_shape)
+    pre_model_two = ResNet152(
+        weights='imagenet', include_top=False, input_shape=image_shape)
+
+    for pre_model in [pre_model_one, pre_model_two]:
+        pre_model.trainable = False
+        model = models.Sequential()
+        model.add(pre_model)
+        model.add(layers.Flatten())
+        model.add(layers.Dense(256, activation='relu'))
+        model.add(layers.Dense(1, activation='sigmoid'))
+
+        model.summary()
+        models_to_train.append(model)
+
+    return models_to_train
 
 
 def train_(model):
@@ -148,14 +176,20 @@ def determine_disagreements(results0, results1) -> list:
     pass
 
 
+def save_trained_models(models, results_folder):
+    for i, model in enumerate(models):
+        name = 'VGG16' if i == 0 else 'ResNet152'
+        dump(model, open(f'{results_folder}/model_{name}.pkl', 'wb'))
+
+
 if __name__ == '__main__':
-    preprocess_data()  # comment out this line after first run
+    # preprocess_data()  # comment out this line after first run
     models = down_load_and_modify_models()
-    train_(models[0])
-    train_(models[0])
-    test_results_0 = test_(models[0])
-    test_results_1 = test_(models[1])
-    disagreements = determine_disagreements(test_results_0, test_results_1)
-    grad_cam_saliency(disagreements, models)
+    # train_(models[0])
+    # train_(models[0])
+    # test_results_0 = test_(models[0])
+    # test_results_1 = test_(models[1])
+    # disagreements = determine_disagreements(test_results_0, test_results_1)
+    # grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
     # save_confusion_matrices()
