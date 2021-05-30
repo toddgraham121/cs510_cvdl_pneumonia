@@ -2,17 +2,47 @@ import numpy as np
 from datetime import datetime
 import keras
 from keras.applications import VGG16, ResNet152
+from keras.preprocessing import image_dataset_from_directory
 from keras import layers, models
 import tensorflow as tf
 import matplotlib.cm as cm
 import os
 from pickle import dump
 
+from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
+from skimage import exposure
+
+imageSize = 150
+
+
+def loadData():
+    batchSize = 32
+
+    trainDatagen = ImageDataGenerator(
+        rescale=1./255, preprocessing_function=histogramEqualization)
+    testDatagen = ImageDataGenerator(rescale=1./255)
+    valDatagen = ImageDataGenerator(rescale=1./255)
+
+    trainData = trainDatagen.flow_from_directory(
+        '../data/train', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+
+    testData = testDatagen.flow_from_directory(
+        '../data/test', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+
+    valData = valDatagen.flow_from_directory(
+        '../data/val', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+
+    return [trainData, testData, valData]
+
+
+def histogramEqualization(image):
+    return exposure.equalize_hist(image)
+
 
 def _load_image_(named: str = '') -> np.array:
     filepath = '../data/' + named
     photo = keras.preprocessing.image.load_img(
-        filepath, target_size=(224, 224))
+        filepath, target_size=(imageSize, imageSize))
     photo_as_array = keras.preprocessing.image.img_to_array(photo)
     return photo_as_array
 
@@ -139,7 +169,7 @@ def grad_cam_saliency(disagreements, models):
 
 def down_load_and_modify_models() -> list:
     # Adjustable based on our preprocessing
-    image_shape = (150, 150, 3)
+    image_shape = (imageSize, imageSize, 3)
     models_to_train = []
 
     pre_model_one = VGG16(
@@ -155,14 +185,21 @@ def down_load_and_modify_models() -> list:
         model.add(layers.Dense(256, activation='relu'))
         model.add(layers.Dense(1, activation='sigmoid'))
 
-        model.summary()
+        # model.summary()
         models_to_train.append(model)
 
     return models_to_train
 
 
-def train_(model):
+def train_(model, data):
     # TODO: implement,
+    model.compile(optimizer=keras.optimizers.Adam(), loss=keras.losses.BinaryCrossentropy(
+        from_logits=True), metrics=['accuracy'])
+
+    history = model.fit_generator(data[0],
+                                  epochs=10,
+                                  validation_data=data[2]
+                                  )
     pass
 
 
@@ -184,8 +221,9 @@ def save_trained_models(models, results_folder):
 
 if __name__ == '__main__':
     # preprocess_data()  # comment out this line after first run
+    data = loadData()
     models = down_load_and_modify_models()
-    # train_(models[0])
+    train_(models[0], data)
     # train_(models[0])
     # test_results_0 = test_(models[0])
     # test_results_1 = test_(models[1])
