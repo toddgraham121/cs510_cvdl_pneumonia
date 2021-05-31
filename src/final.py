@@ -20,14 +20,16 @@ def loadData():
 
     trainDatagen = ImageDataGenerator(
         rescale=1./255, preprocessing_function=histogramEqualization)
-    testDatagen = ImageDataGenerator(rescale=1./255)
-    valDatagen = ImageDataGenerator(rescale=1./255)
+    testDatagen = ImageDataGenerator(
+        rescale=1./255, preprocessing_function=histogramEqualization)
+    valDatagen = ImageDataGenerator(
+        rescale=1./255, preprocessing_function=histogramEqualization)
 
     trainData = trainDatagen.flow_from_directory(
         '../data/train', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
 
     testData = testDatagen.flow_from_directory(
-        '../data/test', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../data/test', class_mode='binary', shuffle=False, batch_size=batchSize, target_size=(imageSize, imageSize))
 
     valData = valDatagen.flow_from_directory(
         '../data/val', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
@@ -191,8 +193,7 @@ def down_load_and_modify_models() -> list:
     return models_to_train
 
 
-def train_(model, data):
-    # TODO: implement,
+def train_(model, data, modelType):
     model.compile(optimizer=keras.optimizers.Adam(), loss=keras.losses.BinaryCrossentropy(
         from_logits=True), metrics=['accuracy'])
 
@@ -200,7 +201,9 @@ def train_(model, data):
                                   epochs=10,
                                   validation_data=data[2]
                                   )
-    pass
+
+    results_folder = '../results/' + datetime.now().strftime('_%Y-%m-%d_%H-%M-%S')
+    model.save(f'{results_folder}/{modelType}')
 
 
 def test_(model) -> dict:
@@ -223,8 +226,8 @@ if __name__ == '__main__':
     # preprocess_data()  # comment out this line after first run
     data = loadData()
     models = down_load_and_modify_models()
-    train_(models[0], data)
-    # train_(models[0])
+    train_(models[0], data, 'VGG16')
+    train_(models[1], data, 'ResNet152')
     # test_results_0 = test_(models[0])
     # test_results_1 = test_(models[1])
     # disagreements = determine_disagreements(test_results_0, test_results_1)
