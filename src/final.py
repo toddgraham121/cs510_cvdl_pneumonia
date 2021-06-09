@@ -2,43 +2,50 @@ import numpy as np
 from datetime import datetime
 import keras
 from keras.applications import VGG16, ResNet152
-from keras.preprocessing import image_dataset_from_directory
+from keras.callbacks import EarlyStopping
 from keras import layers, models
 import tensorflow as tf
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import os
+import cv2 as cv
 from pickle import dump
 
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from skimage import exposure
 
 imageSize = 150
+batchSize = 32
 
 
 def loadData():
-    batchSize = 32
+    trainDatagen = ImageDataGenerator(rescale=1./255,
+                                      rotation_range=30,
+                                      shear_range=0.2,
+                                      zoom_range=0.2,
+                                      width_shift_range=0.1,
+                                      height_shift_range=0.1)
 
-    trainDatagen = ImageDataGenerator(
-        rescale=1./255, preprocessing_function=histogramEqualization)
     testDatagen = ImageDataGenerator(
-        rescale=1./255, preprocessing_function=histogramEqualization)
-    valDatagen = ImageDataGenerator(
-        rescale=1./255, preprocessing_function=histogramEqualization)
+        rescale=1./255)
+
+    valDatagen = ImageDataGenerator(rescale=1./255,
+                                    rotation_range=30,
+                                    shear_range=0.2,
+                                    zoom_range=0.2,
+                                    width_shift_range=0.1,
+                                    height_shift_range=0.1)
 
     trainData = trainDatagen.flow_from_directory(
-        '../data/train', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../preprocessed_data/train', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
 
     testData = testDatagen.flow_from_directory(
-        '../data/test', class_mode='binary', shuffle=False, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../preprocessed_data/test', class_mode='binary', shuffle=False, batch_size=batchSize, target_size=(imageSize, imageSize))
 
     valData = valDatagen.flow_from_directory(
-        '../data/val', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../preprocessed_data/val', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
 
     return [trainData, testData, valData]
-
-
-def histogramEqualization(image):
-    return exposure.equalize_hist(image)
 
 
 def _load_image_(named: str = '') -> np.array:
@@ -50,12 +57,14 @@ def _load_image_(named: str = '') -> np.array:
 
 
 def _load_and_preprocess_image_(named: str = '') -> np.array:
-    photo_as_array = _load_image_(named)
-    photo_as_array = np.expand_dims(photo_as_array, axis=0)
-    photo_as_array = keras.applications.vgg16.preprocess_input(
-        photo_as_array)  # we probably do not want to do this step
-    # histogram normalization here
-    return photo_as_array
+    path = '../data/' + named
+    image = cv.imread(path, 0)
+    equalizedImage = cv.equalizeHist(image)
+    return equalizedImage
+
+
+def _save_preprocessed_image(image, filename: str) -> None:
+    cv.imwrite(filename, image)
 
 
 def _save_(image_array: np.array, with_filename: str) -> None:
@@ -73,10 +82,14 @@ def preprocess_data():
     # iterate over each file in the data folder and for each file preprocess and save:
     for subdir, dirs, files in os.walk('../data'):
         for file in files:
+            new_subdir = f'{subdir.replace("../data/", "")}'
             filepath = os.path.join(subdir, file)
-            preprocessed_image_array = _load_and_preprocess_image_(file)
-            _save_(preprocessed_image_array,
-                   '../preprocessed_data/' + filepath)
+            if filepath.endswith('.jpeg'):
+                preprocessed_image = _load_and_preprocess_image_(filepath)
+                new_dir = '../preprocessed_data/' + new_subdir
+                _create_(new_dir)
+                _save_preprocessed_image(
+                    preprocessed_image, f'{new_dir}/{file}')
 
 
 def save_gradcam_for_image_(named: str = '', saliency_maps: list = [], alpha: float = 0.4):
@@ -175,16 +188,19 @@ def down_load_and_modify_models() -> list:
     models_to_train = []
 
     pre_model_one = VGG16(
-        weights='imagenet', include_top=False, input_shape=image_shape)
+        weights='imagenet', include_top=False, input_shape=image_shape, classes=2)
     pre_model_two = ResNet152(
-        weights='imagenet', include_top=False, input_shape=image_shape)
+        weights='imagenet', include_top=False, input_shape=image_shape, classes=2)
 
     for pre_model in [pre_model_one, pre_model_two]:
         pre_model.trainable = False
         model = models.Sequential()
         model.add(pre_model)
         model.add(layers.Flatten())
+        model.add(layers.Dense(512, activation='relu'))
+        model.add(layers.Dropout(0.2))
         model.add(layers.Dense(256, activation='relu'))
+        model.add(layers.Dropout(0.2))
         model.add(layers.Dense(1, activation='sigmoid'))
 
         # model.summary()
@@ -194,13 +210,17 @@ def down_load_and_modify_models() -> list:
 
 
 def train_(model, data, modelType):
-    model.compile(optimizer=keras.optimizers.Adam(), loss=keras.losses.BinaryCrossentropy(
-        from_logits=True), metrics=['accuracy'])
+    earlyStop = [EarlyStopping(patience=10, verbose=1)]
 
-    history = model.fit_generator(data[0],
-                                  epochs=10,
-                                  validation_data=data[2]
-                                  )
+    model.compile(optimizer=keras.optimizers.Adam(0.0001),
+                  loss='binary_crossentropy', metrics=['accuracy'])
+
+    history = model.fit(data[0],
+                        steps_per_epoch=len(data[0]),
+                        epochs=40,
+                        validation_data=data[1],
+                        validation_steps=len(data[1]),
+                        callbacks=earlyStop)
 
     results_folder = '../results/' + datetime.now().strftime('_%Y-%m-%d_%H-%M-%S')
     model.save(f'{results_folder}/{modelType}')
@@ -222,12 +242,24 @@ def save_trained_models(models, results_folder):
         dump(model, open(f'{results_folder}/model_{name}.pkl', 'wb'))
 
 
+def load_trained_models(results_folder):
+    modelsToLoad = []
+    for model in ['VGG16', 'ResNet152']:
+        modelsToLoad.append(models.load_model(f'{results_folder}/{model}'))
+
+    return modelsToLoad
+
+
 if __name__ == '__main__':
     # preprocess_data()  # comment out this line after first run
-    data = loadData()
-    models = down_load_and_modify_models()
-    train_(models[0], data, 'VGG16')
-    train_(models[1], data, 'ResNet152')
+    # data = loadData()
+    # models = down_load_and_modify_models()
+    models = load_trained_models(
+        '../results/_2021-05-30_20-30-26')
+
+    # train_(models[0], data, 'VGG16')
+    # train_(models[1], data, 'ResNet152')
+
     # test_results_0 = test_(models[0])
     # test_results_1 = test_(models[1])
     # disagreements = determine_disagreements(test_results_0, test_results_1)
