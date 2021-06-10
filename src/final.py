@@ -13,6 +13,7 @@ from pickle import dump
 
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from skimage import exposure
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 imageSize = 150
 batchSize = 32
@@ -251,6 +252,24 @@ def determine_disagreements(results0, results1) -> list:
     return disagreements
 
 
+def save_confusion_matrices(data, results, model_name):
+    true_labels = data[1].labels
+    predictions = list(results.values())
+    predicted_labels = []
+
+    for probability in predictions:
+        if probability >= 0.5:
+            predicted_labels.append(1)
+        else:
+            predicted_labels.append(0)
+
+    cm = confusion_matrix(true_labels, predicted_labels)
+    cm_display = ConfusionMatrixDisplay(cm)
+    cm_display.plot()
+    _create_('../results/confusion_matrices')
+    plt.savefig('../results/confusion_matrices/' + model_name + datetime.now().strftime('_%Y-%m-%d_%H-%M-%S'))
+
+
 def save_trained_models(models, results_folder):
     for i, model in enumerate(models):
         name = 'VGG16' if i == 0 else 'ResNet152'
@@ -280,4 +299,5 @@ if __name__ == '__main__':
     disagreements = determine_disagreements(test_results_0, test_results_1)
     # grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
-    # save_confusion_matrices()
+    save_confusion_matrices(data, test_results_0, 'VGG16')
+    save_confusion_matrices(data, test_results_1, 'ResNet152')
