@@ -226,14 +226,29 @@ def train_(model, data, modelType):
     model.save(f'{results_folder}/{modelType}')
 
 
-def test_(model) -> dict:
-    # TODO: implement, return dictionary of filename to tuple of classification and whether it was correct
-    pass
+def test_(model, data) -> dict:
+    predictions = model.predict(data[1], batch_size=32)
+    extracted_predictions = []
+    for p in predictions:
+        extracted_predictions.append(p[0])
+    results = dict(zip(data[1].filenames, extracted_predictions))
+    return results
 
 
 def determine_disagreements(results0, results1) -> list:
-    # TODO: compare dictionaries and return collection of disagreementsm (Dictionary of filename to which model was correct (0 or 1)
-    pass
+    disagreements = []
+    for filename in results0.keys():
+        if results0[filename] >= 0.5:
+            c0 = 1
+        else:
+            c0 = 0
+        if results1[filename] >= 0.5:
+            c1 = 1
+        else:
+            c1 = 0
+        if c0 != c1:
+            disagreements.append(filename)
+    return disagreements
 
 
 def save_trained_models(models, results_folder):
@@ -252,7 +267,7 @@ def load_trained_models(results_folder):
 
 if __name__ == '__main__':
     # preprocess_data()  # comment out this line after first run
-    # data = loadData()
+    data = loadData()
     # models = down_load_and_modify_models()
     models = load_trained_models(
         '../results/_2021-05-30_20-30-26')
@@ -260,9 +275,9 @@ if __name__ == '__main__':
     # train_(models[0], data, 'VGG16')
     # train_(models[1], data, 'ResNet152')
 
-    # test_results_0 = test_(models[0])
-    # test_results_1 = test_(models[1])
-    # disagreements = determine_disagreements(test_results_0, test_results_1)
+    test_results_0 = test_(models[0], data)
+    test_results_1 = test_(models[1], data)
+    disagreements = determine_disagreements(test_results_0, test_results_1)
     # grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
     # save_confusion_matrices()

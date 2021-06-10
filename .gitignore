@@ -3,3 +3,6 @@ data/
 preprocessed_data/
 results/
 .DS_Store
+
+.idea
+venv
