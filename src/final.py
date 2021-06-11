@@ -302,8 +302,8 @@ if __name__ == '__main__':
     # train_(models[0], data, 'VGG16')
     # train_(models[1], data, 'ResNet152')
 
-    test_results_0 = test_(models[0], data)
-    test_results_1 = test_(models[1], data)
+    test_results_0 = test_(models[0], data, 'VGG16')
+    test_results_1 = test_(models[1], data, 'ResNet152')
     disagreements = determine_disagreements(test_results_0, test_results_1)
     grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
