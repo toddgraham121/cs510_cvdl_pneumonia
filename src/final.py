@@ -227,12 +227,17 @@ def train_(model, data, modelType):
     model.save(f'{results_folder}/{modelType}')
 
 
-def test_(model, data) -> dict:
+def test_(model, data, model_name) -> dict:
     predictions = model.predict(data[1], batch_size=32)
     extracted_predictions = []
     for p in predictions:
         extracted_predictions.append(p[0])
     results = dict(zip(data[1].filenames, extracted_predictions))
+
+    test_score = model.evaluate(data[1])
+    print("==== " + model_name + " Metrics ====")
+    print("    Test Loss: " + str(test_score[0]))
+    print("    Test Accuracy: " + str(test_score[1]))
     return results
 
 
