@@ -159,7 +159,10 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
     return saliency_map.numpy()
 
 
-def grad_cam_saliency(disagreements: list, models):
+def grad_cam_saliency(disagreements: list =[], models:list = []):
+    disagreements.append('test/normal/IM-0025-0001.jpeg')
+    if not models:
+        models = load_trained_models()
     # vgg16 = keras.applications.VGG16(include_top=True,
     #                                  weights="imagenet",
     #                                  input_tensor=None,
@@ -294,11 +297,11 @@ def load_trained_models(results_folder):
 
 
 if __name__ == '__main__':
-    preprocess_data()  # comment out this line after first run
+    # preprocess_data()  # comment out this line after first run
     data = loadData()
     # models = down_load_and_modify_models()
     models = load_trained_models(
-        '../results/_2021-05-30_20-30-26')
+        '../results/_2021-06-08_22-59-26')
 
     # train_(models[0], data, 'VGG16')
     # train_(models[1], data, 'ResNet152')
