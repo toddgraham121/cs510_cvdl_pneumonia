@@ -20,7 +20,7 @@ batchSize = 32
 
 
 def loadData():
-    trainDatagen = ImageDataGenerator(rescale=1./255,
+    trainDatagen = ImageDataGenerator(rescale=1. / 255,
                                       rotation_range=30,
                                       shear_range=0.2,
                                       zoom_range=0.2,
@@ -28,9 +28,9 @@ def loadData():
                                       height_shift_range=0.1)
 
     testDatagen = ImageDataGenerator(
-        rescale=1./255)
+        rescale=1. / 255)
 
-    valDatagen = ImageDataGenerator(rescale=1./255,
+    valDatagen = ImageDataGenerator(rescale=1. / 255,
                                     rotation_range=30,
                                     shear_range=0.2,
                                     zoom_range=0.2,
@@ -38,13 +38,16 @@ def loadData():
                                     height_shift_range=0.1)
 
     trainData = trainDatagen.flow_from_directory(
-        '../preprocessed_data/train', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../preprocessed_data/train', class_mode='binary', shuffle=True, batch_size=batchSize,
+        target_size=(imageSize, imageSize))
 
     testData = testDatagen.flow_from_directory(
-        '../preprocessed_data/test', class_mode='binary', shuffle=False, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../preprocessed_data/test', class_mode='binary', shuffle=False, batch_size=batchSize,
+        target_size=(imageSize, imageSize))
 
     valData = valDatagen.flow_from_directory(
-        '../preprocessed_data/val', class_mode='binary', shuffle=True, batch_size=batchSize, target_size=(imageSize, imageSize))
+        '../preprocessed_data/val', class_mode='binary', shuffle=True, batch_size=batchSize,
+        target_size=(imageSize, imageSize))
 
     return [trainData, testData, valData]
 
@@ -151,12 +154,12 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
     saliency_map = tf.squeeze(saliency_map)
     # For visualization normalize the between 0 & 1
     saliency_map = tf.maximum(saliency_map, 0) / \
-        tf.math.reduce_max(saliency_map)
+                   tf.math.reduce_max(saliency_map)
 
     return saliency_map.numpy()
 
 
-def grad_cam_saliency(disagreements, models):
+def grad_cam_saliency(disagreements: list, models):
     # vgg16 = keras.applications.VGG16(include_top=True,
     #                                  weights="imagenet",
     #                                  input_tensor=None,
@@ -174,12 +177,12 @@ def grad_cam_saliency(disagreements, models):
     #     saliency_maps = []
     #     for place in range(1, 4):
     #         saliency_maps.append(make_saliency_map_for_gradcam(image, vgg16, 'block5_conv3', place))
-
+    model_names = ['VGG16', 'ResNet152']
     saliency_maps = []
-    for filename, model in disagreements.items():
+    for filename in disagreements:
         image = _load_image_(filename)
-        saliency_maps.append(make_saliency_map_for_gradcam(
-            image, models[model], 'block5_conv3'))
+        saliency_maps.append(make_saliency_map_for_gradcam(image, models[0], model_names[0]))
+        saliency_maps.append(make_saliency_map_for_gradcam(image, models[1], model_names[1]))
         save_gradcam_for_image_(filename, saliency_maps)
 
 
@@ -290,7 +293,7 @@ def load_trained_models(results_folder):
 
 
 if __name__ == '__main__':
-    # preprocess_data()  # comment out this line after first run
+    preprocess_data()  # comment out this line after first run
     data = loadData()
     # models = down_load_and_modify_models()
     models = load_trained_models(
@@ -302,7 +305,7 @@ if __name__ == '__main__':
     test_results_0 = test_(models[0], data)
     test_results_1 = test_(models[1], data)
     disagreements = determine_disagreements(test_results_0, test_results_1)
-    # grad_cam_saliency(disagreements, models)
+    grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
     save_confusion_matrices(data, test_results_0, 'VGG16')
     save_confusion_matrices(data, test_results_1, 'ResNet152')
