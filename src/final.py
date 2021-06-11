@@ -19,6 +19,14 @@ imageSize = 150
 batchSize = 32
 
 
+class Disagreement:
+    def __init__(self, filename=None, actual=None, vgg_pred=None, res_pred=None):
+        self.name = filename
+        self.actual = actual
+        self.vgg = vgg_pred
+        self.res = res_pred
+
+
 def loadData():
     trainDatagen = ImageDataGenerator(rescale=1. / 255,
                                       rotation_range=30,
@@ -245,8 +253,11 @@ def test_(model, data, model_name) -> dict:
     return results
 
 
-def determine_disagreements(results0, results1) -> list:
+def determine_disagreements(results0, results1, data) -> list:
     disagreements = []
+
+    # Make a dict of filenames : true labels
+    true_labels = dict(zip(data[1].filenames, data[1].labels))
     for filename in results0.keys():
         if results0[filename] >= 0.5:
             c0 = 1
@@ -257,7 +268,9 @@ def determine_disagreements(results0, results1) -> list:
         else:
             c1 = 0
         if c0 != c1:
-            disagreements.append(filename)
+            # Make a new Disagreement obj
+            dis = Disagreement(filename, true_labels[filename], c0, c1)
+            disagreements.append(dis)
     return disagreements
 
 
@@ -294,19 +307,18 @@ def load_trained_models(results_folder):
 
 
 if __name__ == '__main__':
-    preprocess_data()  # comment out this line after first run
+    # preprocess_data()  # comment out this line after first run
     data = loadData()
     # models = down_load_and_modify_models()
-    models = load_trained_models(
-        '../results/_2021-05-30_20-30-26')
+    models = load_trained_models( '../results/_2021-06-08_22-59-26')
 
     # train_(models[0], data, 'VGG16')
     # train_(models[1], data, 'ResNet152')
 
     test_results_0 = test_(models[0], data, 'VGG16')
     test_results_1 = test_(models[1], data, 'ResNet152')
-    disagreements = determine_disagreements(test_results_0, test_results_1)
-    grad_cam_saliency(disagreements, models)
+    disagreements = determine_disagreements(test_results_0, test_results_1, data)
+    # grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
-    save_confusion_matrices(data, test_results_0, 'VGG16')
-    save_confusion_matrices(data, test_results_1, 'ResNet152')
+    # save_confusion_matrices(data, test_results_0, 'VGG16')
+    # save_confusion_matrices(data, test_results_1, 'ResNet152')
