@@ -179,6 +179,7 @@ def grad_cam_saliency(disagreements: list, models):
     #         saliency_maps.append(make_saliency_map_for_gradcam(image, vgg16, 'block5_conv3', place))
     model_names = ['VGG16', 'ResNet152']
     saliency_maps = []
+    print('disagreements:', disagreements)
     for filename in disagreements:
         image = _load_image_(filename)
         saliency_maps.append(make_saliency_map_for_gradcam(image, models[0], model_names[0]))

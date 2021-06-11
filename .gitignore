@@ -1,6 +1,7 @@
 # ignore data folders
-data_full/
 data/
+data_partial/
+data_full/
 preprocessed_data/
 results/
 .DS_Store
