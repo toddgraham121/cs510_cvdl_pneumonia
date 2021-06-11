@@ -150,8 +150,8 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
         sorted_preds = np.argsort(preds[0])
         # print(sorted_preds)
         index = sorted_preds[-1 * place]
-        print('Classification rank:', place, 'Index:',
-              index, 'Value:', preds[0][index])
+        # print('Classification rank:', place, 'Index:',
+        #       index, 'Value:', preds[0][index])
         class_channel = preds[:, index]
 
     gradients = tape.gradient(class_channel, last_conv_layer_output)
@@ -167,7 +167,7 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
     return saliency_map.numpy()
 
 
-def grad_cam_saliency(disagreements: list =[], models:list = []):
+def grad_cam_saliency(disagreements: list = [], models: list = []):
     disagreements.append('test/normal/IM-0025-0001.jpeg')
     if not models:
         models = load_trained_models()
@@ -192,6 +192,7 @@ def grad_cam_saliency(disagreements: list =[], models:list = []):
     saliency_maps = []
     print('disagreements:', disagreements)
     for filename in disagreements:
+        filename = 'test/' + filename
         image = _load_image_(filename)
         saliency_maps.append(make_saliency_map_for_gradcam(image, models[0], model_names[0]))
         saliency_maps.append(make_saliency_map_for_gradcam(image, models[1], model_names[1]))
@@ -323,7 +324,7 @@ if __name__ == '__main__':
     test_results_0 = test_(models[0], data, 'VGG16')
     test_results_1 = test_(models[1], data, 'ResNet152')
     disagreements = determine_disagreements(test_results_0, test_results_1, data)
-    # grad_cam_saliency(disagreements, models)
+    grad_cam_saliency(disagreements, models)
     # save_accuracy_graphs()
     # save_confusion_matrices(data, test_results_0, 'VGG16')
     # save_confusion_matrices(data, test_results_1, 'ResNet152')
