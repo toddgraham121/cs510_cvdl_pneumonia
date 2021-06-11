@@ -1,4 +1,5 @@
 # ignore data folders
+data_full/
 data/
 preprocessed_data/
 results/
