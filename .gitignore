@@ -3,6 +3,7 @@ data/
 data_partial/
 data_full/
 preprocessed_data/
+preprocessed_data_full/
 results/
 .DS_Store
 

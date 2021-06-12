@@ -14,6 +14,10 @@ from pickle import dump
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from skimage import exposure
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import tensorflow.python.ops.numpy_ops.np_config as np_conf
+
+# tf.python.ops.numpy_ops.\
+np_conf.enable_numpy_behavior()
 
 imageSize = 150
 batchSize = 32
@@ -61,7 +65,7 @@ def loadData():
 
 
 def _load_image_(named: str = '') -> np.array:
-    filepath = '../data/' + named
+    filepath = '../preprocessed_data/' + named
     photo = keras.preprocessing.image.load_img(
         filepath, target_size=(imageSize, imageSize))
     photo_as_array = keras.preprocessing.image.img_to_array(photo)
@@ -69,7 +73,7 @@ def _load_image_(named: str = '') -> np.array:
 
 
 def _load_and_preprocess_image_(named: str = '') -> np.array:
-    path = '../data/' + named
+    path = '../preprocessed_data/' + named
     image = cv.imread(path, 0)
     equalizedImage = cv.equalizeHist(image)
     return equalizedImage
@@ -116,6 +120,7 @@ def save_gradcam_for_image_(named: str = '', saliency_maps: list = [], alpha: fl
         jet_heatmap = jet_colors[heatmap]
 
         # create heatmap image
+        jet_heatmap = np.expand_dims(jet_heatmap, 1)
         jet_heatmap = keras.preprocessing.image.array_to_img(jet_heatmap)
         jet_heatmap = jet_heatmap.resize((image.shape[1], image.shape[0]))
         jet_heatmap = keras.preprocessing.image.img_to_array(jet_heatmap)
@@ -125,11 +130,14 @@ def save_gradcam_for_image_(named: str = '', saliency_maps: list = [], alpha: fl
 
         # create dated folder for results
         results_folder = '../results/' + datetime.now().strftime(
-            '_%Y-%m-%d_%H-%M-%S')
+            '_%Y-%m-%d_%H-%M-%S/')
         _create_(results_folder)
+        _create_(results_folder + 'test')
+        _create_(results_folder + 'test/NORMAL')
+        _create_(results_folder + 'test/PNEUMONIA')
 
-        filename_combined = named[:-4] + '_combined_prediction_' + str(i)
-        filename_heatmap = named[:-4] + '_heatmap_prediction_' + str(i)
+        filename_combined = named[:-5] + '_combined_prediction_' + str(i) + '.jpg'
+        filename_heatmap = named[:-5] + '_heatmap_prediction_' + str(i) + '.jpg'
 
         _save_(superimposed_img, results_folder + filename_combined)
         _save_(jet_heatmap, results_folder + filename_heatmap)
@@ -137,29 +145,45 @@ def save_gradcam_for_image_(named: str = '', saliency_maps: list = [], alpha: fl
         i += 1
 
 
-def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: str, place: int) -> np.array:
+def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: str, place: int = 1) -> np.array:
+    # model = keras.layers.Concatenate([model])
     gradient_model = tf.keras.models.Model(
         [model.inputs], [model.get_layer(
             last_conv_layer_name).output, model.output]
     )
+    # gradient_model = tf.keras.models.Model(
+    #     [model.inputs], [model.layers[0].get_layer(
+    #         last_conv_layer_name).output, model.output]
+    # )
 
+    image = np.expand_dims(image, 0)
     with tf.GradientTape() as tape:
         last_conv_layer_output, preds = gradient_model(image)
-        # print(preds)
-        # print(preds.shape)
+        print('preds:', preds)
+        print('preds.shape:', preds.shape)
+        print('last_conv_layer_output:', last_conv_layer_output)
         sorted_preds = np.argsort(preds[0])
         # print(sorted_preds)
         index = sorted_preds[-1 * place]
         # print('Classification rank:', place, 'Index:',
         #       index, 'Value:', preds[0][index])
         class_channel = preds[:, index]
+        print('class_channel:', class_channel)
+        print('index', index)
 
     gradients = tape.gradient(class_channel, last_conv_layer_output)
+    print('gradients', gradients)
+    # pooled_gradients = tf.reduce_mean(gradients, axis=(0, 1))
     pooled_gradients = tf.reduce_mean(gradients, axis=(0, 1, 2))
 
     last_conv_layer_output = last_conv_layer_output[0]
+    # print('first:', last_conv_layer_output.shape, 'second:', pooled_gradients[..., tf.newaxis].shape)
+    # last_conv_layer_output.reshape(last_conv_layer_output.shape[0], 1)
+    # pooled_gradients.reshape(1, last_conv_layer_output.shape[0])
+    print('first:', last_conv_layer_output.shape, 'second:', pooled_gradients[..., tf.newaxis].shape)
     saliency_map = last_conv_layer_output @ pooled_gradients[..., tf.newaxis]
     saliency_map = tf.squeeze(saliency_map)
+    # saliency_map = tf.squeeze(last_conv_layer_output)
     # For visualization normalize the between 0 & 1
     saliency_map = tf.maximum(saliency_map, 0) / \
                    tf.math.reduce_max(saliency_map)
@@ -168,9 +192,9 @@ def make_saliency_map_for_gradcam(image: np.array, model, last_conv_layer_name: 
 
 
 def grad_cam_saliency(disagreements: list = [], models: list = []):
-    disagreements.append('test/normal/IM-0025-0001.jpeg')
-    if not models:
-        models = load_trained_models()
+    # disagreements.append('test/normal/IM-0025-0001.jpeg')
+    # if not models:
+    #     models = load_trained_models()
     # vgg16 = keras.applications.VGG16(include_top=True,
     #                                  weights="imagenet",
     #                                  input_tensor=None,
@@ -188,14 +212,14 @@ def grad_cam_saliency(disagreements: list = [], models: list = []):
     #     saliency_maps = []
     #     for place in range(1, 4):
     #         saliency_maps.append(make_saliency_map_for_gradcam(image, vgg16, 'block5_conv3', place))
-    model_names = ['VGG16', 'ResNet152']
+    # model_names = ['VGG16', 'ResNet152']
     saliency_maps = []
     print('disagreements:', disagreements)
     for filename in disagreements:
-        filename = 'test/' + filename
+        filename = 'test/' + filename.name
         image = _load_image_(filename)
-        saliency_maps.append(make_saliency_map_for_gradcam(image, models[0], model_names[0]))
-        saliency_maps.append(make_saliency_map_for_gradcam(image, models[1], model_names[1]))
+        saliency_maps.append(make_saliency_map_for_gradcam(image, models[0], 'block5_conv3'))
+        # saliency_maps.append(make_saliency_map_for_gradcam(image, models[1], 'conv5_block3_3_conv'))
         save_gradcam_for_image_(filename, saliency_maps)
 
 
@@ -222,6 +246,72 @@ def down_load_and_modify_models() -> list:
 
         # model.summary()
         models_to_train.append(model)
+
+    return models_to_train
+
+
+def down_load_and_re_modify_models(trained_model0, trained_model1) -> list:
+    # Adjustable based on our preprocessing
+    image_shape = (imageSize, imageSize, 3)
+    models_to_train = []
+
+    input_layer = layers.Input(shape=image_shape)
+
+    pre_model_one = VGG16(
+        weights='imagenet', include_top=False, input_shape=image_shape, classes=2, input_tensor=input_layer)
+    test_model0 = keras.models.Sequential()
+    # test_model0.add(pre_model_one)
+    for layer in pre_model_one.layers:
+        test_model0.add(layer)
+    for layer in trained_model0.layers[1:]:
+        test_model0.add(layer)
+    test_model0.compile(optimizer=keras.optimizers.Adam(0.0001),
+              loss='binary_crossentropy', metrics=['accuracy'])
+    test_model0.summary()
+    models_to_train.append(test_model0)
+
+    # models_to_train.append(trained_model1)
+
+    # pre_model_two = ResNet152(
+    #     weights='imagenet', include_top=False, input_shape=image_shape, classes=2, input_tensor=input_layer)
+    # test_model1 = keras.models.Sequential()
+    # # test_model1.add(pre_model_two)
+    # for layer in pre_model_two.layers:
+    #     if layer is list:
+    #         layer = keras.layers.merge(layer.layers)
+    #     test_model1.add(layer)
+    # for layer in trained_model1.layers[1:]:
+    #     test_model1.add(layer)
+    # test_model1.compile(optimizer=keras.optimizers.Adam(0.0001),
+    #               loss='binary_crossentropy', metrics=['accuracy'])
+    # test_model1.summary()
+    # models_to_train.append(test_model1)
+
+    # pre_model_one.trainable = False
+    # model = keras.Sequential()
+    # for layer in pre_model_one.layers:
+    #     model.add(layer)
+    # for layer in trained_model0.layers[1:]:
+    #     model.add(layer)
+
+    # model.compile(optimizer=keras.optimizers.Adam(0.0001),
+    #               loss='binary_crossentropy', metrics=['accuracy'])
+
+    # model.summary()
+    # models_to_train.append(model)
+    #
+    # pre_model_two.trainable = False
+    # model = keras.Sequential()
+    # for layer in pre_model_two.layers:
+    #     model.add(layer)
+    # for layer in trained_model1.layers[1:]:
+    #     model.add(layer)
+    #
+    # model.compile(optimizer=keras.optimizers.Adam(0.0001),
+    #               loss='binary_crossentropy', metrics=['accuracy'])
+    #
+    # model.summary()
+    # models_to_train.append(model)
 
     return models_to_train
 
@@ -315,16 +405,25 @@ if __name__ == '__main__':
     data = loadData()
     # models = down_load_and_modify_models()
 
-    models = load_trained_models(
+    trained_models = load_trained_models(
         '../results/_2021-06-08_22-59-26')
+
+    test_models = down_load_and_re_modify_models(trained_models[0], trained_models[1])
+
+    print('first model:')
+    # test_models[0].layers[0].summary()
+    test_models[0].summary()
+    # print('second model:')
+    # # test_models[1].layers[0].summary()
+    # test_models[1].summary()
 
     # train_(models[0], data, 'VGG16')
     # train_(models[1], data, 'ResNet152')
 
-    test_results_0 = test_(models[0], data, 'VGG16')
-    test_results_1 = test_(models[1], data, 'ResNet152')
+    test_results_0 = test_(test_models[0], data, 'VGG16')
+    test_results_1 = test_(trained_models[1], data, 'ResNet152')
     disagreements = determine_disagreements(test_results_0, test_results_1, data)
-    grad_cam_saliency(disagreements, models)
+    grad_cam_saliency(disagreements, test_models)
     # save_accuracy_graphs()
     # save_confusion_matrices(data, test_results_0, 'VGG16')
     # save_confusion_matrices(data, test_results_1, 'ResNet152')
